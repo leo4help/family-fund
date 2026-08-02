@@ -36,6 +36,7 @@
   .tab.active{ display:block; }
   .card{
     background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:14px;
+    overflow:hidden;
   }
   .card h2{ font-size:15px; margin:0 0 12px; color:var(--blue-dark); }
   .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
@@ -43,9 +44,11 @@
   .field label{ font-size:12px; color:var(--muted); }
   input, select, textarea{
     padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; width:100%;
-    background:#fff; color:var(--text);
+    background:#fff; color:var(--text); min-width:0; box-sizing:border-box;
   }
   textarea{ resize:vertical; min-height:36px; }
+  /* iOS 原生日期輸入框有時候不吃通用的 width:100%，用型別選擇器再鎖一次寬度 */
+  input[type="date"]{ width:100%; max-width:100%; min-width:0; box-sizing:border-box; }
   .btn{
     background:var(--blue); color:#fff; border:none; border-radius:8px; padding:10px 16px;
     font-size:14px; cursor:pointer; font-weight:600;
