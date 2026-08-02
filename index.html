@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家庭記帳系統</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root{
+    --blue:#4472C4; --blue-dark:#2f5597; --bg:#f4f6fb; --card:#ffffff;
+    --text:#1f2430; --muted:#6b7280; --border:#e2e5ec;
+    --green:#2e7d32; --red:#c62828; --yellow:#fff7cc;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;
+    background:var(--bg); color:var(--text);
+  }
+  header{
+    background:var(--blue); color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between;
+  }
+  header h1{ font-size:18px; margin:0; font-weight:600; }
+  header .status{ font-size:12px; opacity:.85; }
+  nav{
+    display:flex; background:#fff; border-bottom:1px solid var(--border); overflow-x:auto;
+  }
+  nav button{
+    flex:1; min-width:80px; padding:12px 8px; border:none; background:none; cursor:pointer;
+    font-size:14px; color:var(--muted); border-bottom:3px solid transparent; white-space:nowrap;
+  }
+  nav button.active{ color:var(--blue-dark); border-bottom-color:var(--blue); font-weight:600; }
+  main{ max-width:900px; margin:0 auto; padding:16px; }
+  .tab{ display:none; }
+  .tab.active{ display:block; }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:14px;
+  }
+  .card h2{ font-size:15px; margin:0 0 12px; color:var(--blue-dark); }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .field{ flex:1; min-width:140px; display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:12px; color:var(--muted); }
+  input, select, textarea{
+    padding:9px 10px; border:1px solid var(--border); border-radius:8px; font-size:14px; width:100%;
+    background:#fff; color:var(--text);
+  }
+  textarea{ resize:vertical; min-height:36px; }
+  .btn{
+    background:var(--blue); color:#fff; border:none; border-radius:8px; padding:10px 16px;
+    font-size:14px; cursor:pointer; font-weight:600;
+  }
+  .btn:hover{ background:var(--blue-dark); }
+  .btn.secondary{ background:#eef1f8; color:var(--blue-dark); }
+  .btn.secondary:hover{ background:#dfe4f2; }
+  .btn.small{ padding:6px 10px; font-size:12px; }
+  .toggle-group{ display:flex; gap:8px; margin-bottom:10px; }
+  .toggle-group button{
+    flex:1; padding:10px; border:1px solid var(--border); background:#fff; border-radius:8px; cursor:pointer; font-size:14px;
+  }
+  .toggle-group button.on{ background:var(--blue); color:#fff; border-color:var(--blue); }
+  .msg{ font-size:13px; padding:8px 10px; border-radius:8px; margin-top:8px; display:none; }
+  .msg.ok{ background:#e8f5e9; color:var(--green); display:block; }
+  .msg.err{ background:#fdecea; color:var(--red); display:block; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
+  th{ color:var(--muted); font-weight:600; }
+  .pending-item{ border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px; background:#fffdf5; }
+  .pending-item .meta{ font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
+  .kpi{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px; text-align:center; }
+  .kpi .label{ font-size:12px; color:var(--muted); }
+  .kpi .value{ font-size:20px; font-weight:700; margin-top:4px; }
+  .kpi .value.pos{ color:var(--green); }
+  .kpi .value.neg{ color:var(--red); }
+  canvas{ max-width:100%; }
+  .lock-screen{
+    position:fixed; inset:0; background:var(--blue); color:#fff; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; z-index:50;
+  }
+  .lock-screen input{ width:220px; text-align:center; }
+  .account-group h3{ font-size:13px; color:var(--muted); margin:14px 0 6px; }
+  .account-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); }
+  .account-row .acc-label{ flex:1; font-size:14px; }
+  .account-row input{ width:130px; }
+  .hint{ font-size:12px; color:var(--muted); margin-top:4px; }
+  .badge{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:#eef1f8; color:var(--blue-dark); margin-left:6px; }
+</style>
+</head>
+<body>
+
+<div id="lockScreen" class="lock-screen">
+  <div style="font-size:20px;font-weight:700;">家庭記帳系統</div>
+  <input id="pinInput" type="password" placeholder="輸入密碼">
+  <button class="btn" onclick="unlock()">進入</button>
+  <div id="lockMsg" style="font-size:13px;color:#ffe0e0;"></div>
+</div>
+
+<header>
+  <h1>家庭記帳系統</h1>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <button id="refreshBtn" onclick="refreshAll()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:6px;padding:6px 10px;font-size:12px;cursor:pointer;">↻ 資料重整</button>
+    <div class="status" id="connStatus">尚未連線</div>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-tab="income">收入</button>
+  <button data-tab="expense">支出</button>
+  <button data-tab="asset">資產</button>
+  <button data-tab="settings">設定</button>
+  <button data-tab="dashboard">總覽</button>
+</nav>
+
+<main>
+
+  <!-- ===== 收入 ===== -->
+  <div class="tab active" id="tab-income">
+    <div class="card">
+      <h2>記一筆收入</h2>
+      <div class="toggle-group">
+        <button id="btnGotPaid" class="on" onclick="setIncomeMode(true)">已收到款項</button>
+        <button id="btnNotYet" onclick="setIncomeMode(false)">先預登記(待收款)</button>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>客戶</label>
+          <select id="incClient"></select>
+        </div>
+        <div class="field">
+          <label>幣別</label>
+          <select id="incCurrency"></select>
+        </div>
+      </div>
+      <div class="row" id="incPaidRow">
+        <div class="field">
+          <label>實際收款日期</label>
+          <input type="date" id="incDate">
+        </div>
+        <div class="field">
+          <label>實際金額(原幣)</label>
+          <input type="number" id="incAmount" step="0.01">
+        </div>
+      </div>
+      <div class="row" id="incPendingRow" style="display:none;">
+        <div class="field">
+          <label>預計金額(原幣)</label>
+          <input type="number" id="incExpectedAmount" step="0.01">
+        </div>
+        <div class="field">
+          <label>預計收款日期(可留空)</label>
+          <input type="date" id="incExpectedDate">
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>原始應收月份(補發款項才填,可留空)</label>
+          <select id="incOrigMonth"><option value="">— 不適用 —</option></select>
+        </div>
+        <div class="field">
+          <label>記錄人</label>
+          <select id="incRecorder"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>備註</label>
+          <textarea id="incNote"></textarea>
+        </div>
+      </div>
+      <button class="btn" onclick="submitIncome()">送出</button>
+      <div class="msg" id="incMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>待收款清單 <span class="badge" id="pendingCount">0</span></h2>
+      <div id="pendingList"><div class="hint">載入中...</div></div>
+    </div>
+  </div>
+
+  <!-- ===== 支出 ===== -->
+  <div class="tab" id="tab-expense">
+    <div class="card">
+      <h2>記一筆支出</h2>
+      <div class="row">
+        <div class="field">
+          <label>日期</label>
+          <input type="date" id="expDate">
+        </div>
+        <div class="field">
+          <label>子項目</label>
+          <select id="expSubcategory" onchange="updateParentHint()"></select>
+          <div class="hint" id="expParentHint"></div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>金額(TWD)</label>
+          <input type="number" id="expAmount" step="1">
+        </div>
+        <div class="field">
+          <label>付款方式</label>
+          <select id="expPayment"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>付款者</label>
+          <select id="expPayer"></select>
+        </div>
+        <div class="field">
+          <label>帳戶</label>
+          <select id="expAccount"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>記錄人</label>
+          <select id="expRecorder"></select>
+        </div>
+        <div class="field">
+          <label>備註</label>
+          <textarea id="expNote"></textarea>
+        </div>
+      </div>
+      <button class="btn" onclick="submitExpense()">送出</button>
+      <div class="msg" id="expMsg"></div>
+    </div>
+  </div>
+
+  <!-- ===== 資產 ===== -->
+  <div class="tab" id="tab-asset">
+    <div class="card">
+      <h2>本月資產更新</h2>
+      <div class="row">
+        <div class="field">
+          <label>年月</label>
+          <select id="astMonth"></select>
+        </div>
+        <div class="field">
+          <label>記錄人</label>
+          <select id="astRecorder"></select>
+        </div>
+      </div>
+      <div class="hint">只需要填有變動或想記錄的帳戶，其餘留空即可，不會送出。</div>
+      <div id="astAccountList"></div>
+      <button class="btn" style="margin-top:10px;" onclick="submitAssets()">儲存本月資產</button>
+      <div class="msg" id="astMsg"></div>
+    </div>
+  </div>
+
+  <!-- ===== 設定 ===== -->
+  <div class="tab" id="tab-settings">
+    <div class="card">
+      <h2>連線設定</h2>
+      <div class="row">
+        <div class="field">
+          <label>Apps Script Web App 網址</label>
+          <input type="text" id="cfgUrl" placeholder="https://script.google.com/macros/s/xxx/exec">
+        </div>
+      </div>
+      <button class="btn secondary" onclick="saveConfig()">儲存連線設定</button>
+      <div class="msg" id="cfgMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>更新匯率</h2>
+      <div class="hint">TWD 固定為 1，不能改。改完按下方按鈕會直接寫回 Sheet，不用自己開 Sheet 改。</div>
+      <div id="rateList" style="margin-top:8px;"></div>
+      <button class="btn secondary" style="margin-top:6px;" onclick="submitRates()">儲存匯率</button>
+      <div class="msg" id="rateMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>新增客戶</h2>
+      <div class="row">
+        <div class="field"><label>客戶名稱</label><input type="text" id="newClientName"></div>
+      </div>
+      <button class="btn secondary" onclick="addNew('addClient',{name:val('newClientName')},'newClientName')">新增</button>
+    </div>
+
+    <div class="card">
+      <h2>新增銀行</h2>
+      <div class="row">
+        <div class="field"><label>銀行名稱</label><input type="text" id="newBankName"></div>
+      </div>
+      <button class="btn secondary" onclick="addNew('addBank',{name:val('newBankName')},'newBankName')">新增</button>
+    </div>
+
+    <div class="card">
+      <h2>新增支出子項目</h2>
+      <div class="row">
+        <div class="field">
+          <label>母項目</label>
+          <select id="newCatParent">
+            <option value="A">A. 固定生存支出</option>
+            <option value="B">B. 變動生活支出</option>
+            <option value="C">C. 未來與儲備</option>
+          </select>
+        </div>
+        <div class="field"><label>子項目名稱</label><input type="text" id="newCatSub"></div>
+      </div>
+      <button class="btn secondary" onclick="addNew('addCategory',{parent:val('newCatParent'),sub:val('newCatSub')},'newCatSub')">新增</button>
+    </div>
+
+    <div class="card">
+      <h2>新增銀行帳戶</h2>
+      <div class="row">
+        <div class="field"><label>擁有者</label><select id="newAcctOwner"></select></div>
+        <div class="field"><label>銀行</label><select id="newAcctBank"></select></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>幣別</label><select id="newAcctCurrency"></select></div>
+        <div class="field"><label>帳戶名稱/備註</label><input type="text" id="newAcctName"></div>
+      </div>
+      <button class="btn secondary" onclick="addAccount()">新增帳戶</button>
+      <div class="msg" id="acctMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>新增幣別</h2>
+      <div class="row">
+        <div class="field"><label>幣別代碼(例如 JPY)</label><input type="text" id="newCurCode"></div>
+        <div class="field"><label>對台幣匯率</label><input type="number" id="newCurRate" step="0.0001"></div>
+      </div>
+      <button class="btn secondary" onclick="addNew('addCurrency',{code:val('newCurCode'),rate:parseFloat(val('newCurRate'))||1},'newCurCode')">新增</button>
+    </div>
+
+    <div class="card">
+      <h2>試算表初始化</h2>
+      <div class="hint">第一次部署後，請先按這個按鈕一次，之後才能透過上面的表單新增客戶/銀行/子項目/幣別。重複執行也安全。</div>
+      <button class="btn secondary" style="margin-top:10px;" onclick="runSetup()">執行初始化</button>
+      <div class="msg" id="setupMsg"></div>
+    </div>
+  </div>
+
+  <!-- ===== 總覽 ===== -->
+  <div class="tab" id="tab-dashboard">
+    <div class="card">
+      <div class="row">
+        <div class="field">
+          <label>查詢年月</label>
+          <select id="dashMonth" onchange="loadDashboard()"></select>
+        </div>
+      </div>
+      <div class="kpis" id="dashKpis"></div>
+    </div>
+    <div class="card">
+      <h2>月度收支趨勢</h2>
+      <canvas id="chartTrend" height="120"></canvas>
+    </div>
+    <div class="card">
+      <h2>支出母項目佔比(當月)</h2>
+      <canvas id="chartCategory" height="160"></canvas>
+    </div>
+    <div class="card">
+      <h2>資產-依擁有者(當月)</h2>
+      <canvas id="chartOwner" height="120"></canvas>
+    </div>
+    <div class="card">
+      <h2>資產-依幣別 / 依銀行(當月)</h2>
+      <table id="tblCurrency"></table>
+      <div style="height:10px;"></div>
+      <table id="tblBank"></table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ============ 設定 / 連線 ============
+var CFG = JSON.parse(localStorage.getItem('hh_cfg') || '{}');
+var BOOT = null;
+var CHARTS = {};
+
+function val(id){ return document.getElementById(id).value; }
+function setVal(id,v){ document.getElementById(id).value = v; }
+
+function api(action, method, params, payload){
+  var url = CFG.url;
+  if (!url) { alert('請先到「設定」分頁填入 Apps Script Web App 網址'); return Promise.reject('no url'); }
+  if (method === 'GET') {
+    var qs = Object.assign({action:action, pin:CFG.pin}, params||{});
+    var q = Object.keys(qs).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(qs[k]); }).join('&');
+    return fetch(url + '?' + q).then(function(r){ return r.json(); });
+  } else {
+    return fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:action, pin:CFG.pin, payload: payload||{}})
+    }).then(function(r){ return r.json(); });
+  }
+}
+
+function showMsg(id, ok, text){
+  var el = document.getElementById(id);
+  el.className = 'msg ' + (ok ? 'ok' : 'err');
+  el.textContent = text;
+  setTimeout(function(){ el.className='msg'; }, 5000);
+}
+
+// ============ 鎖定畫面 ============
+function unlock(){
+  var pin = val('pinInput');
+  CFG.pin = pin;
+  if (!CFG.url) {
+    // 還沒設定網址，先讓使用者進去設定頁填寫
+    localStorage.setItem('hh_cfg', JSON.stringify(CFG));
+    document.getElementById('lockScreen').style.display = 'none';
+    switchTab('settings');
+    return;
+  }
+  api('bootstrap','GET').then(function(res){
+    if(!res.ok){
+      document.getElementById('lockMsg').textContent = res.error || '密碼錯誤或連線失敗';
+      return;
+    }
+    localStorage.setItem('hh_cfg', JSON.stringify(CFG));
+    document.getElementById('lockScreen').style.display = 'none';
+    boot(res.data);
+  }).catch(function(){
+    document.getElementById('lockMsg').textContent = '連不上，請確認網址與密碼';
+  });
+}
+
+// ============ Tab 切換 ============
+document.querySelectorAll('nav button').forEach(function(btn){
+  btn.addEventListener('click', function(){ switchTab(btn.dataset.tab); });
+});
+function switchTab(name){
+  document.querySelectorAll('nav button').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===name); });
+  document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.id==='tab-'+name); });
+  if (name==='dashboard' && BOOT) loadDashboard();
+  if (name==='income' && BOOT) loadPending();
+}
+
+// ============ 初始載入 ============
+function boot(data){
+  BOOT = data;
+  document.getElementById('connStatus').textContent = '已連線';
+  fillSelect('incClient', BOOT.clients);
+  fillSelect('incCurrency', BOOT.currencies);
+  fillSelect('incRecorder', BOOT.owners);
+  fillSelect('incOrigMonth', BOOT.months, true);
+  fillSelect('expPayment', BOOT.paymentMethods);
+  fillSelect('expPayer', BOOT.owners);
+  fillSelect('expAccount', BOOT.banks);
+  fillSelect('expRecorder', BOOT.owners);
+  fillSelect('astMonth', BOOT.months);
+  fillSelect('astRecorder', BOOT.owners);
+  fillSelect('newAcctOwner', BOOT.owners);
+  fillSelect('newAcctBank', BOOT.banks);
+  fillSelect('newAcctCurrency', BOOT.currencies);
+  fillSelect('dashMonth', BOOT.months);
+
+  var subSelect = document.getElementById('expSubcategory');
+  subSelect.innerHTML = '';
+  BOOT.categories.forEach(function(c){
+    var opt = document.createElement('option');
+    opt.value = c.sub; opt.textContent = c.parent.substring(0,2) + ' ' + c.sub;
+    opt.dataset.parent = c.parent;
+    subSelect.appendChild(opt);
+  });
+  updateParentHint();
+  renderRates();
+
+  setVal('expDate', todayStr());
+  setVal('incDate', todayStr());
+
+  var thisMonth = todayStr().substring(0,7);
+  if (BOOT.months.indexOf(thisMonth) !== -1) { setVal('astMonth', thisMonth); setVal('dashMonth', thisMonth); }
+
+  renderAssetAccounts();
+  loadPending();
+}
+
+function todayStr(){
+  var d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+function fillSelect(id, arr, withEmpty){
+  var el = document.getElementById(id);
+  el.innerHTML = '';
+  if (withEmpty) {
+    var e = document.createElement('option'); e.value=''; e.textContent='— 不適用 —'; el.appendChild(e);
+  }
+  arr.forEach(function(v){
+    var opt = document.createElement('option'); opt.value = v; opt.textContent = v; el.appendChild(opt);
+  });
+}
+
+// ============ 收入 ============
+function setIncomeMode(gotPaid){
+  document.getElementById('btnGotPaid').classList.toggle('on', gotPaid);
+  document.getElementById('btnNotYet').classList.toggle('on', !gotPaid);
+  document.getElementById('incPaidRow').style.display = gotPaid ? 'flex' : 'none';
+  document.getElementById('incPendingRow').style.display = gotPaid ? 'none' : 'flex';
+}
+
+function submitIncome(){
+  var gotPaid = document.getElementById('btnGotPaid').classList.contains('on');
+  var payload = {
+    client: val('incClient'), currency: val('incCurrency'),
+    recorder: val('incRecorder'), note: val('incNote'), origMonth: val('incOrigMonth')
+  };
+  if (gotPaid) {
+    payload.date = val('incDate'); payload.amount = val('incAmount');
+    if (!payload.date || !payload.amount) { showMsg('incMsg', false, '請填實際收款日期與金額'); return; }
+  } else {
+    payload.expectedAmount = val('incExpectedAmount'); payload.expectedDate = val('incExpectedDate');
+    if (!payload.expectedAmount) { showMsg('incMsg', false, '請填預計金額'); return; }
+  }
+  api('addIncome','POST',null,payload).then(function(res){
+    if (res.ok) { showMsg('incMsg', true, '已新增，ID: ' + res.data.id); setVal('incAmount',''); setVal('incExpectedAmount',''); setVal('incNote',''); loadPending(); }
+    else showMsg('incMsg', false, res.error);
+  });
+}
+
+function loadPending(){
+  api('pendingIncome','GET').then(function(res){
+    if(!res.ok) return;
+    var list = res.data;
+    document.getElementById('pendingCount').textContent = list.length;
+    var box = document.getElementById('pendingList');
+    if (list.length === 0) { box.innerHTML = '<div class="hint">目前沒有待收款項目</div>'; return; }
+    box.innerHTML = '';
+    list.forEach(function(item){
+      var div = document.createElement('div');
+      div.className = 'pending-item';
+      div.innerHTML =
+        '<div class="meta">' + item.client + '　' + (item.expectedAmount||'') + ' ' + item.currency +
+        (item.expectedDate ? '　預計:' + item.expectedDate : '') +
+        (item.origMonth ? '　原始月份:' + item.origMonth : '') + '</div>' +
+        (item.note ? '<div class="hint">' + item.note + '</div>' : '') +
+        '<div class="row" style="margin-top:6px;">' +
+          '<div class="field"><label>實際收款日期</label><input type="date" id="cf_date_'+item.id+'" value="'+todayStr()+'"></div>' +
+          '<div class="field"><label>實際金額</label><input type="number" step="0.01" id="cf_amt_'+item.id+'" value="'+(item.expectedAmount||'')+'"></div>' +
+        '</div>' +
+        '<button class="btn small" onclick="confirmPending(\''+item.id+'\')">確認入帳</button>';
+      box.appendChild(div);
+    });
+  });
+}
+
+function confirmPending(id){
+  var payload = { id: id, actualDate: val('cf_date_'+id), actualAmount: val('cf_amt_'+id) };
+  api('confirmIncome','POST',null,payload).then(function(res){
+    if (res.ok) { loadPending(); } else alert(res.error);
+  });
+}
+
+// ============ 支出 ============
+function updateParentHint(){
+  var sel = document.getElementById('expSubcategory');
+  var opt = sel.options[sel.selectedIndex];
+  var hint = document.getElementById('expParentHint');
+  hint.textContent = opt ? '母項目：' + (opt.dataset.parent || '') + '（自動歸類，不用另外選）' : '';
+}
+
+function submitExpense(){
+  var payload = {
+    date: val('expDate'), subcategory: val('expSubcategory'), amount: val('expAmount'),
+    paymentMethod: val('expPayment'), recorder: val('expRecorder'), note: val('expNote'),
+    payer: val('expPayer'), account: val('expAccount')
+  };
+  if (!payload.date || !payload.subcategory || !payload.amount) { showMsg('expMsg', false, '請填日期/子項目/金額'); return; }
+  api('addExpense','POST',null,payload).then(function(res){
+    if (res.ok) { showMsg('expMsg', true, '已新增，ID: ' + res.data.id); setVal('expAmount',''); setVal('expNote',''); }
+    else showMsg('expMsg', false, res.error);
+  });
+}
+
+// ============ 資產 ============
+function renderAssetAccounts(){
+  var box = document.getElementById('astAccountList');
+  box.innerHTML = '';
+  var byOwner = {};
+  BOOT.accounts.forEach(function(a){ (byOwner[a.owner] = byOwner[a.owner]||[]).push(a); });
+  Object.keys(byOwner).forEach(function(owner){
+    var h = document.createElement('h3'); h.textContent = owner; box.appendChild(h);
+    byOwner[owner].forEach(function(a){
+      var row = document.createElement('div'); row.className = 'account-row';
+      row.innerHTML =
+        '<div class="acc-label">' + a.bank + ' · ' + a.currency + (a.name ? ' · ' + a.name : '') + '</div>' +
+        '<input type="number" step="0.01" placeholder="金額" data-acc="'+a.id+'">';
+      box.appendChild(row);
+    });
+  });
+}
+
+function submitAssets(){
+  var month = val('astMonth'), recorder = val('astRecorder');
+  if (!month) { showMsg('astMsg', false, '請選年月'); return; }
+  var inputs = document.querySelectorAll('#astAccountList input[data-acc]');
+  var jobs = [];
+  inputs.forEach(function(inp){
+    if (inp.value !== '') {
+      jobs.push(api('addAssetSnapshot','POST',null,{month:month, accountId:inp.dataset.acc, amount:inp.value, recorder:recorder}));
+    }
+  });
+  if (jobs.length === 0) { showMsg('astMsg', false, '沒有填任何金額'); return; }
+  Promise.all(jobs).then(function(results){
+    var failed = results.filter(function(r){ return !r.ok; });
+    if (failed.length) showMsg('astMsg', false, '部分失敗: ' + failed.map(function(f){return f.error;}).join(', '));
+    else { showMsg('astMsg', true, '已儲存 ' + jobs.length + ' 筆'); inputs.forEach(function(i){ i.value=''; }); }
+  });
+}
+
+// ============ 設定 ============
+function saveConfig(){
+  CFG.url = val('cfgUrl');
+  localStorage.setItem('hh_cfg', JSON.stringify(CFG));
+  showMsg('cfgMsg', true, '已儲存，重新整理頁面即可連線');
+}
+
+function renderRates(){
+  var box = document.getElementById('rateList');
+  box.innerHTML = '';
+  BOOT.currencies.forEach(function(c){
+    var isTwd = (c === 'TWD');
+    var row = document.createElement('div');
+    row.className = 'row';
+    var rateVal = (BOOT.rates && BOOT.rates[c] != null) ? BOOT.rates[c] : '';
+    row.innerHTML =
+      '<div class="field"><label>' + c + ' 對台幣匯率</label>' +
+      '<input type="number" step="0.0001" id="rate_' + c + '" value="' + rateVal + '"' + (isTwd ? ' disabled' : '') + '></div>';
+    box.appendChild(row);
+  });
+}
+
+function submitRates(){
+  var rates = {};
+  BOOT.currencies.forEach(function(c){
+    if (c === 'TWD') return;
+    var v = val('rate_' + c);
+    if (v !== '') rates[c] = v;
+  });
+  api('updateRates','POST',null,{rates:rates}).then(function(res){
+    if (res.ok) { showMsg('rateMsg', true, '已更新匯率: ' + res.data.updated.join(', ')); refreshBootstrap(); }
+    else showMsg('rateMsg', false, res.error);
+  });
+}
+
+function addNew(action, payload, clearId){
+  api(action,'POST',null,payload).then(function(res){
+    if (res.ok) { alert('新增成功'); if(clearId) setVal(clearId,''); refreshBootstrap(); }
+    else alert(res.error);
+  });
+}
+
+function addAccount(){
+  var payload = { owner: val('newAcctOwner'), bank: val('newAcctBank'), currency: val('newAcctCurrency'), name: val('newAcctName') };
+  api('addAccount','POST',null,payload).then(function(res){
+    if (res.ok) { showMsg('acctMsg', true, '已新增帳戶'); setVal('newAcctName',''); refreshBootstrap(); }
+    else showMsg('acctMsg', false, res.error);
+  });
+}
+
+function runSetup(){
+  if (!confirm('確定要執行初始化嗎？第一次部署後執行一次即可，之後重複執行也不會有副作用。')) return;
+  api('setup','POST',null,{}).then(function(res){
+    if (res.ok) showMsg('setupMsg', true, '初始化完成');
+    else showMsg('setupMsg', false, res.error);
+  });
+}
+
+function refreshBootstrap(){
+  api('bootstrap','GET').then(function(res){ if(res.ok) boot(res.data); });
+}
+
+// ============ 總覽 ============
+function loadDashboard(){
+  var month = val('dashMonth');
+  if (!month) return;
+  api('dashboard','GET',{month:month}).then(function(res){
+    if (!res.ok) { alert(res.error); return; }
+    renderDashboard(res.data);
+  });
+}
+
+function renderDashboard(d){
+  var cur = d.trend.filter(function(t){ return t.month === d.month; })[0] || {income:0,expense:0,balance:0};
+  var kpiHtml = '';
+  kpiHtml += kpi('總收入', cur.income, 'pos');
+  kpiHtml += kpi('總支出', cur.expense, 'neg');
+  kpiHtml += kpi('結餘', cur.balance, cur.balance>=0?'pos':'neg');
+  kpiHtml += kpi('家庭總資產', d.totalAsset, 'pos');
+  document.getElementById('dashKpis').innerHTML = kpiHtml;
+
+  drawChart('chartTrend','line', {
+    labels: d.trend.map(function(t){return t.month;}),
+    datasets: [
+      {label:'總收入', data:d.trend.map(function(t){return t.income;}), borderColor:'#2e7d32', tension:.2},
+      {label:'總支出', data:d.trend.map(function(t){return t.expense;}), borderColor:'#c62828', tension:.2},
+      {label:'結餘', data:d.trend.map(function(t){return t.balance;}), borderColor:'#4472C4', tension:.2}
+    ]
+  });
+
+  drawChart('chartCategory','pie', {
+    labels: d.categoryBreakdown.map(function(c){return c.category;}),
+    datasets: [{ data: d.categoryBreakdown.map(function(c){return c.amount;}), backgroundColor:['#4472C4','#ed7d31','#70ad47'] }]
+  });
+
+  drawChart('chartOwner','bar', {
+    labels: d.byOwner.map(function(o){return o.owner;}),
+    datasets: [{ label:'資產(TWD)', data:d.byOwner.map(function(o){return o.amount;}), backgroundColor:'#4472C4' }]
+  });
+
+  renderTable('tblCurrency', '幣別', d.byCurrency.map(function(c){return {label:c.currency, amount:c.amount};}));
+  renderTable('tblBank', '銀行', d.byBank.filter(function(b){return b.amount>0;}).map(function(b){return {label:b.bank, amount:b.amount};}));
+}
+
+function kpi(label, value, cls){
+  return '<div class="kpi"><div class="label">'+label+'</div><div class="value '+cls+'">'+Math.round(value).toLocaleString()+'</div></div>';
+}
+
+function drawChart(id, type, data){
+  var ctx = document.getElementById(id).getContext('2d');
+  if (CHARTS[id]) CHARTS[id].destroy();
+  CHARTS[id] = new Chart(ctx, { type:type, data:data, options:{ responsive:true, plugins:{legend:{position:'bottom'}} } });
+}
+
+function renderTable(id, labelHeader, rows){
+  var el = document.getElementById(id);
+  var html = '<tr><th>'+labelHeader+'</th><th>金額(TWD)</th></tr>';
+  rows.forEach(function(r){ html += '<tr><td>'+r.label+'</td><td>'+Math.round(r.amount).toLocaleString()+'</td></tr>'; });
+  el.innerHTML = html;
+}
+
+// ============ 資料重整（不重新整理頁面，也不用重打密碼） ============
+function refreshAll(){
+  var btn = document.getElementById('refreshBtn');
+  var oldText = btn.textContent;
+  btn.disabled = true; btn.textContent = '重整中...';
+  api('bootstrap','GET').then(function(res){
+    if (res.ok) {
+      boot(res.data);
+      var activeBtn = document.querySelector('nav button.active');
+      var activeTab = activeBtn ? activeBtn.dataset.tab : 'income';
+      if (activeTab === 'dashboard') loadDashboard();
+      if (activeTab === 'income') loadPending();
+    } else {
+      alert(res.error || '重整失敗');
+    }
+  }).catch(function(){
+    alert('連不上，請檢查網路或連線設定');
+  }).finally(function(){
+    btn.disabled = false; btn.textContent = oldText;
+  });
+}
+
+// ============ 啟動：如果之前登入過，自動登入，不用每次重新輸入密碼 ============
+(function init(){
+  if (CFG.url && CFG.pin) {
+    document.getElementById('pinInput').value = CFG.pin;
+    document.getElementById('lockMsg').textContent = '自動登入中...';
+    api('bootstrap','GET').then(function(res){
+      if (res.ok) {
+        document.getElementById('lockScreen').style.display = 'none';
+        boot(res.data);
+      } else {
+        document.getElementById('lockMsg').textContent = res.error || '自動登入失敗，請重新輸入密碼並按「進入」';
+      }
+    }).catch(function(){
+      document.getElementById('lockMsg').textContent = '連不上，請確認網路後按「進入」重試';
+    });
+  }
+})();
+</script>
+</body>
+</html>
