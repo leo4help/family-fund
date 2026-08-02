@@ -366,7 +366,11 @@
 
 <script>
 // ============ 設定 / 連線 ============
+// 固定的 Apps Script Web App 網址（不會變），寫死在這裡，任何裝置開啟都不用再手動輸入網址，只要輸入密碼即可。
+var DEFAULT_APP_URL = 'https://script.google.com/macros/s/AKfycbzUYSRocxlSciC0HCzUHRJALm0TjbMAEvHueGk0WXpLIeoS7xh6KcMc6tcZq044hgo/exec';
+
 var CFG = JSON.parse(localStorage.getItem('hh_cfg') || '{}');
+if (!CFG.url) CFG.url = DEFAULT_APP_URL;
 var BOOT = null;
 var CHARTS = {};
 
@@ -435,6 +439,7 @@ function switchTab(name){
 function boot(data){
   BOOT = data;
   document.getElementById('connStatus').textContent = '已連線';
+  setVal('cfgUrl', CFG.url);
   fillSelect('incClient', BOOT.clients);
   fillSelect('incCurrency', BOOT.currencies);
   fillSelect('incRecorder', BOOT.owners);
