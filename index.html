@@ -423,7 +423,7 @@
       <div class="kpis" id="dashKpis"></div>
     </div>
     <div class="card">
-      <h2>月度收支趨勢</h2>
+      <h2>每日收支明細（當月）</h2>
       <canvas id="chartTrend" height="120"></canvas>
     </div>
     <div class="card">
@@ -813,14 +813,7 @@ function renderDashboard(d){
   kpiHtml += kpi('家庭總資產', d.totalAsset, 'pos');
   document.getElementById('dashKpis').innerHTML = kpiHtml;
 
-  drawChart('chartTrend','line', {
-    labels: d.trend.map(function(t){return t.month;}),
-    datasets: [
-      {label:'總收入', data:d.trend.map(function(t){return t.income;}), borderColor:'#2e7d32', tension:.2},
-      {label:'總支出', data:d.trend.map(function(t){return t.expense;}), borderColor:'#c62828', tension:.2},
-      {label:'結餘', data:d.trend.map(function(t){return t.balance;}), borderColor:'#4472C4', tension:.2}
-    ]
-  });
+  renderDailyFlowChart(d);
 
   drawChart('chartCategory','pie', {
     labels: d.categoryBreakdown.map(function(c){return c.category;}),
@@ -838,6 +831,48 @@ function renderDashboard(d){
 
 function kpi(label, value, cls){
   return '<div class="kpi"><div class="label">'+label+'</div><div class="value '+cls+'">'+Math.round(value).toLocaleString()+'</div></div>';
+}
+
+// ============ 每日收支明細（堆疊長條 + 累積結餘線） ============
+var INCOME_PALETTE = ['#2e7d32','#4472C4','#00897b','#5b9bd5','#43682b','#26a69a','#7cafdd','#1b5e20','#0277bd','#66bb6a'];
+var EXPENSE_PALETTE = ['#c62828','#ed7d31','#997300','#e65100','#b71c1c','#f1975a','#8d6e63','#d84315','#ffb300','#a1662f'];
+
+function renderDailyFlowChart(d){
+  var labels = d.daily.map(function(x){ return String(x.day); });
+  var datasets = [];
+
+  d.dailyClients.forEach(function(c, i){
+    datasets.push({
+      type: 'bar', label: c, stack: 'cash',
+      data: d.daily.map(function(x){ return x.incomeByClient[c] || 0; }),
+      backgroundColor: INCOME_PALETTE[i % INCOME_PALETTE.length]
+    });
+  });
+  d.dailySubs.forEach(function(s, i){
+    datasets.push({
+      type: 'bar', label: s, stack: 'cash',
+      data: d.daily.map(function(x){ return -(x.expenseBySub[s] || 0); }),
+      backgroundColor: EXPENSE_PALETTE[i % EXPENSE_PALETTE.length]
+    });
+  });
+  datasets.push({
+    type: 'line', label: '本月累積結餘',
+    data: d.daily.map(function(x){ return x.balance; }),
+    borderColor: '#222222', backgroundColor: '#222222',
+    tension: .25, pointRadius: 2, borderWidth: 2, order: 0
+  });
+
+  var ctx = document.getElementById('chartTrend').getContext('2d');
+  if (CHARTS.chartTrend) CHARTS.chartTrend.destroy();
+  CHARTS.chartTrend = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true } }
+    }
+  });
 }
 
 function drawChart(id, type, data){
