@@ -12,6 +12,7 @@
     --green:#2e7d32; --red:#c62828; --yellow:#fff7cc;
   }
   *{box-sizing:border-box;}
+  html, body{ overflow-x:hidden; max-width:100%; }
   body{
     margin:0; font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,"PingFang TC","Microsoft JhengHei",sans-serif;
     background:var(--bg); color:var(--text);
@@ -82,6 +83,26 @@
   .account-row input{ width:130px; }
   .hint{ font-size:12px; color:var(--muted); margin-top:4px; }
   .badge{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:#eef1f8; color:var(--blue-dark); margin-left:6px; }
+
+  /* ===== 手機版：欄位一律改直排、縮小留白，避免橫向擠壓被裁切 ===== */
+  @media (max-width: 600px){
+    header{ padding:10px 12px; flex-wrap:wrap; gap:6px; }
+    header h1{ font-size:16px; }
+    header .status{ font-size:11px; }
+    #refreshBtn{ font-size:11px; padding:5px 8px; }
+    nav button{ min-width:64px; font-size:12px; padding:10px 4px; }
+    main{ padding:10px; }
+    .card{ padding:12px; }
+    .row{ flex-direction:column; gap:10px; }
+    .field{ min-width:0; width:100%; }
+    .toggle-group button{ font-size:13px; padding:9px 4px; }
+    .kpis{ grid-template-columns:repeat(2, 1fr); }
+    .account-row{ flex-wrap:wrap; }
+    .account-row .acc-label{ width:100%; }
+    .account-row input{ width:100%; }
+    table{ font-size:12px; }
+    .lock-screen input{ width:80%; max-width:260px; }
+  }
 </style>
 </head>
 <body>
