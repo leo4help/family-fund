@@ -87,6 +87,20 @@
   .account-row input{ width:130px; }
   .hint{ font-size:12px; color:var(--muted); margin-top:4px; }
   .badge{ display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; background:#eef1f8; color:var(--blue-dark); margin-left:6px; }
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,24,35,.55); display:flex; align-items:center; justify-content:center;
+    z-index:200; padding:20px;
+  }
+  .modal-box{
+    background:#fff; border-radius:16px; padding:28px 24px; text-align:center; max-width:300px; width:100%;
+    box-shadow:0 12px 32px rgba(0,0,0,.25); animation:modal-pop .18s ease-out;
+  }
+  @keyframes modal-pop{ from{ transform:scale(.9); opacity:0; } to{ transform:scale(1); opacity:1; } }
+  .modal-icon{
+    width:56px; height:56px; border-radius:50%; background:var(--green); color:#fff; font-size:28px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 14px;
+  }
+  .modal-text{ font-size:15px; margin-bottom:18px; color:var(--text); line-height:1.5; word-break:break-word; white-space:pre-line; }
 
   /* ===== 手機版：欄位一律改直排、縮小留白，避免橫向擠壓被裁切 ===== */
   @media (max-width: 600px){
@@ -117,6 +131,14 @@
   <input id="pinInput" type="password" placeholder="輸入密碼">
   <button class="btn" onclick="unlock()">進入</button>
   <div id="lockMsg" style="font-size:13px;color:#ffe0e0;"></div>
+</div>
+
+<div id="successModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <div class="modal-text" id="modalText"></div>
+    <button class="btn" onclick="closeModal()">好</button>
+  </div>
 </div>
 
 <header>
@@ -218,19 +240,25 @@
       </div>
       <div class="row">
         <div class="field">
-          <label>金額(TWD)</label>
-          <input type="number" id="expAmount" step="1">
+          <label>幣別</label>
+          <select id="expCurrency"></select>
         </div>
         <div class="field">
-          <label>付款方式</label>
-          <select id="expPayment"></select>
+          <label>金額(原幣)</label>
+          <input type="number" id="expAmount" step="0.01">
         </div>
       </div>
       <div class="row">
         <div class="field">
+          <label>付款方式</label>
+          <select id="expPayment"></select>
+        </div>
+        <div class="field">
           <label>付款者</label>
           <select id="expPayer"></select>
         </div>
+      </div>
+      <div class="row">
         <div class="field">
           <label>帳戶</label>
           <select id="expAccount"></select>
@@ -419,6 +447,18 @@ function api(action, method, params, payload){
   }
 }
 
+var modalTimer = null;
+function showSuccessModal(text){
+  document.getElementById('modalText').textContent = text;
+  document.getElementById('successModal').style.display = 'flex';
+  if (modalTimer) clearTimeout(modalTimer);
+  modalTimer = setTimeout(closeModal, 2200);
+}
+function closeModal(){
+  document.getElementById('successModal').style.display = 'none';
+  if (modalTimer) { clearTimeout(modalTimer); modalTimer = null; }
+}
+
 function showMsg(id, ok, text){
   var el = document.getElementById(id);
   el.className = 'msg ' + (ok ? 'ok' : 'err');
@@ -471,6 +511,7 @@ function boot(data){
   fillSelect('incRecorder', BOOT.owners);
   fillSelect('incOrigMonth', BOOT.months, true);
   fillSelect('expPayment', BOOT.paymentMethods);
+  fillSelect('expCurrency', BOOT.currencies);
   fillSelect('expPayer', BOOT.owners);
   fillSelect('expAccount', BOOT.banks);
   fillSelect('expRecorder', BOOT.owners);
@@ -540,7 +581,7 @@ function submitIncome(){
     if (!payload.expectedAmount) { showMsg('incMsg', false, '請填預計金額'); return; }
   }
   api('addIncome','POST',null,payload).then(function(res){
-    if (res.ok) { showMsg('incMsg', true, '已新增，ID: ' + res.data.id); setVal('incAmount',''); setVal('incExpectedAmount',''); setVal('incNote',''); loadPending(); }
+    if (res.ok) { showSuccessModal('收入已新增\nID: ' + res.data.id); setVal('incAmount',''); setVal('incExpectedAmount',''); setVal('incNote',''); loadPending(); }
     else showMsg('incMsg', false, res.error);
   });
 }
@@ -574,7 +615,7 @@ function loadPending(){
 function confirmPending(id){
   var payload = { id: id, actualDate: val('cf_date_'+id), actualAmount: val('cf_amt_'+id) };
   api('confirmIncome','POST',null,payload).then(function(res){
-    if (res.ok) { loadPending(); } else alert(res.error);
+    if (res.ok) { showSuccessModal('已確認入帳'); loadPending(); } else alert(res.error);
   });
 }
 
@@ -589,12 +630,13 @@ function updateParentHint(){
 function submitExpense(){
   var payload = {
     date: val('expDate'), subcategory: val('expSubcategory'), amount: val('expAmount'),
+    currency: val('expCurrency'),
     paymentMethod: val('expPayment'), recorder: val('expRecorder'), note: val('expNote'),
     payer: val('expPayer'), account: val('expAccount')
   };
   if (!payload.date || !payload.subcategory || !payload.amount) { showMsg('expMsg', false, '請填日期/子項目/金額'); return; }
   api('addExpense','POST',null,payload).then(function(res){
-    if (res.ok) { showMsg('expMsg', true, '已新增，ID: ' + res.data.id); setVal('expAmount',''); setVal('expNote',''); }
+    if (res.ok) { showSuccessModal('支出已新增\nID: ' + res.data.id); setVal('expAmount',''); setVal('expNote',''); }
     else showMsg('expMsg', false, res.error);
   });
 }
@@ -631,7 +673,7 @@ function submitAssets(){
   Promise.all(jobs).then(function(results){
     var failed = results.filter(function(r){ return !r.ok; });
     if (failed.length) showMsg('astMsg', false, '部分失敗: ' + failed.map(function(f){return f.error;}).join(', '));
-    else { showMsg('astMsg', true, '已儲存 ' + jobs.length + ' 筆'); inputs.forEach(function(i){ i.value=''; }); }
+    else { showSuccessModal('資產已儲存\n共 ' + jobs.length + ' 筆'); inputs.forEach(function(i){ i.value=''; }); }
   });
 }
 
@@ -639,7 +681,7 @@ function submitAssets(){
 function saveConfig(){
   CFG.url = val('cfgUrl');
   localStorage.setItem('hh_cfg', JSON.stringify(CFG));
-  showMsg('cfgMsg', true, '已儲存，重新整理頁面即可連線');
+  showSuccessModal('連線設定已儲存\n重新整理頁面即可連線');
 }
 
 function renderRates(){
@@ -665,14 +707,14 @@ function submitRates(){
     if (v !== '') rates[c] = v;
   });
   api('updateRates','POST',null,{rates:rates}).then(function(res){
-    if (res.ok) { showMsg('rateMsg', true, '已更新匯率: ' + res.data.updated.join(', ')); refreshBootstrap(); }
+    if (res.ok) { showSuccessModal('匯率已更新\n' + res.data.updated.join(', ')); refreshBootstrap(); }
     else showMsg('rateMsg', false, res.error);
   });
 }
 
 function addNew(action, payload, clearId){
   api(action,'POST',null,payload).then(function(res){
-    if (res.ok) { alert('新增成功'); if(clearId) setVal(clearId,''); refreshBootstrap(); }
+    if (res.ok) { showSuccessModal('新增成功'); if(clearId) setVal(clearId,''); refreshBootstrap(); }
     else alert(res.error);
   });
 }
@@ -680,7 +722,7 @@ function addNew(action, payload, clearId){
 function addAccount(){
   var payload = { owner: val('newAcctOwner'), bank: val('newAcctBank'), currency: val('newAcctCurrency'), name: val('newAcctName') };
   api('addAccount','POST',null,payload).then(function(res){
-    if (res.ok) { showMsg('acctMsg', true, '已新增帳戶'); setVal('newAcctName',''); refreshBootstrap(); }
+    if (res.ok) { showSuccessModal('帳戶已新增'); setVal('newAcctName',''); refreshBootstrap(); }
     else showMsg('acctMsg', false, res.error);
   });
 }
@@ -688,7 +730,7 @@ function addAccount(){
 function runSetup(){
   if (!confirm('確定要執行初始化嗎？第一次部署後執行一次即可，之後重複執行也不會有副作用。')) return;
   api('setup','POST',null,{}).then(function(res){
-    if (res.ok) showMsg('setupMsg', true, '初始化完成');
+    if (res.ok) showSuccessModal('初始化完成');
     else showMsg('setupMsg', false, res.error);
   });
 }
