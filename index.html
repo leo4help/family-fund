@@ -102,6 +102,25 @@
   }
   .modal-text{ font-size:15px; margin-bottom:18px; color:var(--text); line-height:1.5; word-break:break-word; white-space:pre-line; }
 
+  /* 頂部動態進度條：呼叫 API 期間顯示,並用一層透明遮罩擋住點擊,避免重複送出 */
+  .loading-bar{
+    position:fixed; top:0; left:0; width:100%; height:3px; z-index:300; overflow:hidden; display:none;
+    background:rgba(68,114,196,.15);
+  }
+  .loading-bar.active{ display:block; }
+  .loading-bar::before{
+    content:''; position:absolute; top:0; left:-40%; height:100%; width:40%;
+    background:linear-gradient(90deg, transparent, var(--blue), transparent);
+    animation: loading-slide 1s linear infinite;
+  }
+  @keyframes loading-slide{
+    0%{ left:-40%; }
+    100%{ left:100%; }
+  }
+  .loading-overlay{
+    position:fixed; inset:0; z-index:150; background:transparent; cursor:wait;
+  }
+
   /* ===== 手機版：欄位一律改直排、縮小留白，避免橫向擠壓被裁切 ===== */
   @media (max-width: 600px){
     header{ padding:12px 14px; flex-wrap:wrap; gap:6px; }
@@ -125,6 +144,9 @@
 </style>
 </head>
 <body>
+
+<div id="loadingBar" class="loading-bar"></div>
+<div id="loadingOverlay" class="loading-overlay" style="display:none;"></div>
 
 <div id="lockScreen" class="lock-screen">
   <div style="font-size:20px;font-weight:700;">家庭記帳系統</div>
@@ -431,20 +453,37 @@ var CHARTS = {};
 function val(id){ return document.getElementById(id).value; }
 function setVal(id,v){ document.getElementById(id).value = v; }
 
+var pendingRequests = 0;
+function setLoading(on){
+  var bar = document.getElementById('loadingBar');
+  var overlay = document.getElementById('loadingOverlay');
+  if (on) {
+    pendingRequests++;
+  } else {
+    pendingRequests = Math.max(0, pendingRequests - 1);
+  }
+  var active = pendingRequests > 0;
+  bar.classList.toggle('active', active);
+  overlay.style.display = active ? 'block' : 'none';
+}
+
 function api(action, method, params, payload){
   var url = CFG.url;
   if (!url) { alert('請先到「設定」分頁填入 Apps Script Web App 網址'); return Promise.reject('no url'); }
+  setLoading(true);
+  var req;
   if (method === 'GET') {
     var qs = Object.assign({action:action, pin:CFG.pin}, params||{});
     var q = Object.keys(qs).map(function(k){ return encodeURIComponent(k)+'='+encodeURIComponent(qs[k]); }).join('&');
-    return fetch(url + '?' + q).then(function(r){ return r.json(); });
+    req = fetch(url + '?' + q).then(function(r){ return r.json(); });
   } else {
-    return fetch(url, {
+    req = fetch(url, {
       method:'POST',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body: JSON.stringify({action:action, pin:CFG.pin, payload: payload||{}})
     }).then(function(r){ return r.json(); });
   }
+  return req.finally(function(){ setLoading(false); });
 }
 
 var modalTimer = null;
