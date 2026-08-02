@@ -415,6 +415,10 @@
           <label>查詢年月</label>
           <select id="dashMonth" onchange="loadDashboard()"></select>
         </div>
+        <div class="field">
+          <label>支出子項目篩選</label>
+          <select id="dashSub" onchange="loadDashboard()"></select>
+        </div>
       </div>
       <div class="kpis" id="dashKpis"></div>
     </div>
@@ -782,17 +786,29 @@ function refreshBootstrap(){
 function loadDashboard(){
   var month = val('dashMonth');
   if (!month) return;
-  api('dashboard','GET',{month:month}).then(function(res){
+  var sub = val('dashSub');
+  api('dashboard','GET',{month:month, sub:sub||''}).then(function(res){
     if (!res.ok) { alert(res.error); return; }
     renderDashboard(res.data);
   });
 }
 
 function renderDashboard(d){
+  var subSel = document.getElementById('dashSub');
+  var keep = d.subFilter || val('dashSub') || '';
+  var opts = '<option value="">全部</option>';
+  d.subBreakdown.forEach(function(s){
+    opts += '<option value="'+s.sub+'">'+s.sub+'（'+Math.round(s.pct*100)+'%）</option>';
+  });
+  subSel.innerHTML = opts;
+  subSel.value = keep;
+  if (subSel.value !== keep) subSel.value = ''; // 篩選的子項目在新的月份沒有金額時，退回「全部」
+
   var cur = d.trend.filter(function(t){ return t.month === d.month; })[0] || {income:0,expense:0,balance:0};
+  var expenseLabel = subSel.value ? '總支出（'+subSel.value+'）' : '總支出';
   var kpiHtml = '';
   kpiHtml += kpi('總收入', cur.income, 'pos');
-  kpiHtml += kpi('總支出', cur.expense, 'neg');
+  kpiHtml += kpi(expenseLabel, cur.expense, 'neg');
   kpiHtml += kpi('結餘', cur.balance, cur.balance>=0?'pos':'neg');
   kpiHtml += kpi('家庭總資產', d.totalAsset, 'pos');
   document.getElementById('dashKpis').innerHTML = kpiHtml;
