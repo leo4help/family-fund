@@ -39,6 +39,8 @@
     overflow:hidden;
   }
   .card h2{ font-size:15px; margin:0 0 12px; color:var(--blue-dark); }
+  .chart-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:14px; margin-bottom:14px; }
+  .chart-grid .card{ margin-bottom:0; }
   .row{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
   .field{ flex:1; min-width:140px; display:flex; flex-direction:column; gap:4px; }
   .field label{ font-size:12px; color:var(--muted); }
@@ -145,6 +147,7 @@
     .card{ padding:16px; }
     .row{ flex-direction:column; gap:10px; }
     .field{ min-width:0; width:100%; }
+    .chart-grid{ grid-template-columns:1fr; }
     .toggle-group button{ font-size:13px; padding:9px 4px; }
     .kpis{ grid-template-columns:repeat(2, 1fr); }
     .account-row{ flex-wrap:wrap; }
@@ -443,13 +446,27 @@
       <h2>支出明細（依日展開）</h2>
       <div id="dailyDetail"></div>
     </div>
-    <div class="card">
-      <h2>支出母項目佔比(當月)</h2>
-      <canvas id="chartCategory" height="160"></canvas>
-    </div>
-    <div class="card">
-      <h2>資產-依擁有者(當月)</h2>
-      <canvas id="chartOwner" height="120"></canvas>
+    <div class="chart-grid" id="chartGrid">
+      <div class="card">
+        <h2>支出母項目佔比(當月)</h2>
+        <canvas id="chartCategory" height="200"></canvas>
+        <div id="legendCategory" class="legend-checks"></div>
+      </div>
+      <div class="card">
+        <h2>支出子項目佔比(當月)</h2>
+        <canvas id="chartSub" height="200"></canvas>
+        <div id="legendSub" class="legend-checks"></div>
+      </div>
+      <div class="card">
+        <h2>收入客戶佔比(當月)</h2>
+        <canvas id="chartClient" height="200"></canvas>
+        <div id="legendClient" class="legend-checks"></div>
+      </div>
+      <div class="card">
+        <h2>資產-依擁有者(當月)</h2>
+        <canvas id="chartOwner" height="200"></canvas>
+        <div id="legendOwner" class="legend-checks"></div>
+      </div>
     </div>
     <div class="card">
       <h2>資產-依幣別 / 依銀行(當月)</h2>
@@ -836,12 +853,42 @@ function renderDashboard(d){
   drawChart('chartCategory','pie', {
     labels: d.categoryBreakdown.map(function(c){return c.category;}),
     datasets: [{ data: d.categoryBreakdown.map(function(c){return c.amount;}), backgroundColor:['#4472C4','#ed7d31','#70ad47'] }]
-  });
+  }, 'legendCategory');
 
-  drawChart('chartOwner','bar', {
-    labels: d.byOwner.map(function(o){return o.owner;}),
-    datasets: [{ label:'資產(TWD)', data:d.byOwner.map(function(o){return o.amount;}), backgroundColor:'#4472C4' }]
+  drawChart('chartSub','pie', {
+    labels: d.subBreakdown.map(function(s){return s.sub;}),
+    datasets: [{
+      data: d.subBreakdown.map(function(s){return s.amount;}),
+      backgroundColor: d.subBreakdown.map(function(s,i){return EXPENSE_PALETTE[i % EXPENSE_PALETTE.length];})
+    }]
+  }, 'legendSub');
+
+  var clientTotals = {};
+  d.dailyClients.forEach(function(c){
+    var amt = d.daily.reduce(function(s,x){ return s + (x.incomeByClient[c] || 0); }, 0);
+    if (amt > 0) clientTotals[c] = amt;
   });
+  var clientEntries = Object.keys(clientTotals)
+    .map(function(c){ return { client: c, amount: clientTotals[c] }; })
+    .sort(function(a,b){ return b.amount - a.amount; });
+  drawChart('chartClient','pie', {
+    labels: clientEntries.map(function(c){return c.client;}),
+    datasets: [{
+      data: clientEntries.map(function(c){return c.amount;}),
+      backgroundColor: clientEntries.map(function(c,i){return INCOME_PALETTE[i % INCOME_PALETTE.length];})
+    }]
+  }, 'legendClient');
+
+  var ownerEntries = d.byOwner.filter(function(o){ return o.amount > 0; });
+  drawChart('chartOwner','pie', {
+    labels: ownerEntries.map(function(o){return o.owner;}),
+    datasets: [{
+      data: ownerEntries.map(function(o){return o.amount;}),
+      backgroundColor: ownerEntries.map(function(o,i){return INCOME_PALETTE[i % INCOME_PALETTE.length];})
+    }]
+  }, 'legendOwner');
+
+  renderBankByOwnerCharts(d);
 
   renderTable('tblCurrency', '幣別', d.byCurrency.map(function(c){return {label:c.currency, amount:c.amount};}));
   renderTable('tblBank', '銀行', d.byBank.filter(function(b){return b.amount>0;}).map(function(b){return {label:b.bank, amount:b.amount};}));
@@ -892,44 +939,62 @@ function renderDailyFlowChart(d){
     }
   });
 
-  renderDailyLegend(datasets.map(function(ds){ return { label: ds.label, color: ds.borderColor || ds.backgroundColor }; }));
+  renderChartLegend('chartTrend', 'dailyLegend', datasets.map(function(ds){ return { label: ds.label, color: ds.borderColor || ds.backgroundColor }; }));
 }
 
-// ---- 自訂 ALL 勾選框圖例（三態：全選 / 全不選 / 部分選取） ----
-function renderDailyLegend(items){
-  var html = '<label class="all"><input type="checkbox" id="legendAll" onchange="toggleAllLegend()"> ALL</label>';
+// ---- 自訂 ALL 勾選框圖例（三態：全選 / 全不選 / 部分選取），通用於任何 chartId/legendId 組合 ----
+// 圓餅/甜甜圈圖只有「一個 dataset、多個切片」，要用 toggleDataVisibility(index) 切換；
+// 多 dataset 的圖（例如每日收支明細）才是用 getDatasetMeta(index).hidden 切換。
+function isSliceChart(ch){
+  var t = ch.config.type;
+  return t === 'pie' || t === 'doughnut';
+}
+function setSliceVisible(ch, idx, visible){
+  if (isSliceChart(ch)) {
+    if (ch.getDataVisibility(idx) !== visible) ch.toggleDataVisibility(idx);
+  } else {
+    ch.getDatasetMeta(idx).hidden = visible ? null : true;
+  }
+}
+function getSliceVisible(ch, idx){
+  return isSliceChart(ch) ? ch.getDataVisibility(idx) : !ch.getDatasetMeta(idx).hidden;
+}
+
+function renderChartLegend(chartId, legendId, items){
+  var html = '<label class="all"><input type="checkbox" checked onchange="toggleAllLegend(\''+chartId+'\',\''+legendId+'\')"> ALL</label>';
   items.forEach(function(it, i){
-    html += '<label><input type="checkbox" checked data-idx="'+i+'" onchange="toggleLegendItem(this)">'+
+    html += '<label><input type="checkbox" checked data-idx="'+i+'" onchange="toggleLegendItem(this,\''+chartId+'\',\''+legendId+'\')">'+
       '<span class="swatch" style="background:'+it.color+'"></span>'+esc(it.label)+'</label>';
   });
-  document.getElementById('dailyLegend').innerHTML = html;
-  updateLegendAllState();
+  var el = document.getElementById(legendId);
+  el.innerHTML = html;
+  updateLegendAllState(legendId);
 }
 
-function toggleLegendItem(el){
+function toggleLegendItem(el, chartId, legendId){
   var idx = Number(el.dataset.idx);
-  var ch = CHARTS.chartTrend;
-  ch.getDatasetMeta(idx).hidden = el.checked ? null : true;
+  var ch = CHARTS[chartId];
+  setSliceVisible(ch, idx, el.checked);
   ch.update();
-  updateLegendAllState();
+  updateLegendAllState(legendId);
 }
 
-function toggleAllLegend(){
-  var master = document.getElementById('legendAll');
+function toggleAllLegend(chartId, legendId){
+  var master = document.querySelector('#'+legendId+' .all input');
   var makeVisible = master.checked; // 點擊後的新狀態：true=全選、false=全不選
-  var checks = document.querySelectorAll('#dailyLegend label:not(.all) input');
-  var ch = CHARTS.chartTrend;
+  var checks = document.querySelectorAll('#'+legendId+' label:not(.all) input');
+  var ch = CHARTS[chartId];
   checks.forEach(function(cb, i){
     cb.checked = makeVisible;
-    ch.getDatasetMeta(i).hidden = makeVisible ? null : true;
+    setSliceVisible(ch, i, makeVisible);
   });
   ch.update();
   master.indeterminate = false;
 }
 
-function updateLegendAllState(){
-  var master = document.getElementById('legendAll');
-  var checks = document.querySelectorAll('#dailyLegend label:not(.all) input');
+function updateLegendAllState(legendId){
+  var master = document.querySelector('#'+legendId+' .all input');
+  var checks = document.querySelectorAll('#'+legendId+' label:not(.all) input');
   var total = checks.length, checkedCount = 0;
   checks.forEach(function(cb){ if (cb.checked) checkedCount++; });
   if (checkedCount === 0) { master.checked = false; master.indeterminate = false; }
@@ -1017,10 +1082,57 @@ function saveExpenseRow(id){
   });
 }
 
-function drawChart(id, type, data){
+function drawChart(id, type, data, legendId){
   var ctx = document.getElementById(id).getContext('2d');
   if (CHARTS[id]) CHARTS[id].destroy();
-  CHARTS[id] = new Chart(ctx, { type:type, data:data, options:{ responsive:true, plugins:{legend:{position:'bottom'}} } });
+  CHARTS[id] = new Chart(ctx, {
+    type: type, data: data,
+    options: { responsive:true, plugins:{ legend:{ display: !legendId, position:'bottom' } } }
+  });
+  if (legendId) {
+    var colors = data.datasets[0].backgroundColor;
+    var items = data.labels.map(function(l, i){ return { label:l, color: Array.isArray(colors) ? colors[i] : colors }; });
+    renderChartLegend(id, legendId, items);
+  }
+}
+
+// 依擁有者各畫一張「依銀行」橫向長條圖，動態插入 chart-grid（有幾個擁有者就有幾張，
+// 每次重畫先把上次插入的卡片移除，避免重整月份/篩選時卡片一直往下疊加）。
+function renderBankByOwnerCharts(d){
+  var grid = document.getElementById('chartGrid');
+  Array.prototype.slice.call(grid.querySelectorAll('.bank-owner-card')).forEach(function(el){
+    var canvas = el.querySelector('canvas');
+    if (canvas && CHARTS[canvas.id]) { CHARTS[canvas.id].destroy(); delete CHARTS[canvas.id]; }
+    el.remove();
+  });
+
+  var owners = d.byOwner.map(function(o){ return o.owner; });
+  owners.forEach(function(owner){
+    var canvasId = 'chartBank_' + owner;
+    var card = document.createElement('div');
+    card.className = 'card bank-owner-card';
+    card.innerHTML = '<h2>資產佔比（'+esc(owner)+'，依銀行）</h2><canvas id="'+canvasId+'" height="220"></canvas>';
+    grid.appendChild(card);
+
+    var entries = ((d.byBankOwner && d.byBankOwner[owner]) || [])
+      .filter(function(b){ return b.amount > 0; })
+      .sort(function(a,b){ return b.amount - a.amount; });
+
+    var ctx = card.querySelector('canvas').getContext('2d');
+    CHARTS[canvasId] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: entries.map(function(b){return b.bank;}),
+        datasets: [{ label:'資產(TWD)', data: entries.map(function(b){return b.amount;}), backgroundColor:'#4472C4' }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true } }
+      }
+    });
+  });
 }
 
 function renderTable(id, labelHeader, rows){
