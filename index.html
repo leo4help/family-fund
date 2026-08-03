@@ -147,7 +147,10 @@
     .card{ padding:16px; }
     .row{ flex-direction:column; gap:10px; }
     .field{ min-width:0; width:100%; }
-    .chart-grid{ grid-template-columns:1fr; }
+    .chart-grid{ grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
+    .chart-grid .card{ padding:10px; }
+    .chart-grid .card h2{ font-size:13px; margin-bottom:8px; }
+    .chart-grid .legend-checks{ font-size:11px; gap:4px 8px; }
     .toggle-group button{ font-size:13px; padding:9px 4px; }
     .kpis{ grid-template-columns:repeat(2, 1fr); }
     .account-row{ flex-wrap:wrap; }
