@@ -69,6 +69,11 @@
   th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
   th{ color:var(--muted); font-weight:600; }
   .muted{ color:var(--muted); font-size:13px; }
+  .legend-checks{ display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; font-size:13px; }
+  .legend-checks label{ display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none; }
+  .legend-checks label.all{ font-weight:700; padding-right:12px; border-right:1px solid var(--border); }
+  .legend-checks .swatch{ width:12px; height:12px; border-radius:3px; display:inline-block; flex:none; }
+  .legend-checks input[type="checkbox"]{ width:15px; height:15px; flex:none; }
   .daily-detail{ border:1px solid var(--border); border-radius:8px; margin-bottom:8px; overflow:hidden; }
   .daily-detail summary{ padding:10px 12px; cursor:pointer; font-size:14px; background:#f7f8fa; list-style:none; }
   .daily-detail summary::-webkit-details-marker{ display:none; }
@@ -432,6 +437,7 @@
     <div class="card">
       <h2>每日收支明細（當月）</h2>
       <canvas id="chartTrend" height="120"></canvas>
+      <div id="dailyLegend" class="legend-checks"></div>
     </div>
     <div class="card">
       <h2>支出明細（依日展開）</h2>
@@ -881,10 +887,54 @@ function renderDailyFlowChart(d){
     data: { labels: labels, datasets: datasets },
     options: {
       responsive: true,
-      plugins: { legend: { position: 'bottom' } },
+      plugins: { legend: { display: false } },
       scales: { x: { stacked: true }, y: { stacked: true } }
     }
   });
+
+  renderDailyLegend(datasets.map(function(ds){ return { label: ds.label, color: ds.borderColor || ds.backgroundColor }; }));
+}
+
+// ---- 自訂 ALL 勾選框圖例（三態：全選 / 全不選 / 部分選取） ----
+function renderDailyLegend(items){
+  var html = '<label class="all"><input type="checkbox" id="legendAll" onchange="toggleAllLegend()"> ALL</label>';
+  items.forEach(function(it, i){
+    html += '<label><input type="checkbox" checked data-idx="'+i+'" onchange="toggleLegendItem(this)">'+
+      '<span class="swatch" style="background:'+it.color+'"></span>'+esc(it.label)+'</label>';
+  });
+  document.getElementById('dailyLegend').innerHTML = html;
+  updateLegendAllState();
+}
+
+function toggleLegendItem(el){
+  var idx = Number(el.dataset.idx);
+  var ch = CHARTS.chartTrend;
+  ch.getDatasetMeta(idx).hidden = el.checked ? null : true;
+  ch.update();
+  updateLegendAllState();
+}
+
+function toggleAllLegend(){
+  var master = document.getElementById('legendAll');
+  var makeVisible = master.checked; // 點擊後的新狀態：true=全選、false=全不選
+  var checks = document.querySelectorAll('#dailyLegend label:not(.all) input');
+  var ch = CHARTS.chartTrend;
+  checks.forEach(function(cb, i){
+    cb.checked = makeVisible;
+    ch.getDatasetMeta(i).hidden = makeVisible ? null : true;
+  });
+  ch.update();
+  master.indeterminate = false;
+}
+
+function updateLegendAllState(){
+  var master = document.getElementById('legendAll');
+  var checks = document.querySelectorAll('#dailyLegend label:not(.all) input');
+  var total = checks.length, checkedCount = 0;
+  checks.forEach(function(cb){ if (cb.checked) checkedCount++; });
+  if (checkedCount === 0) { master.checked = false; master.indeterminate = false; }
+  else if (checkedCount === total) { master.checked = true; master.indeterminate = false; }
+  else { master.checked = false; master.indeterminate = true; }
 }
 
 function esc(s){
@@ -893,21 +943,76 @@ function esc(s){
   });
 }
 
+var LAST_DASH_DATA = null;
+var editingExpenseId = null;
+var openDetailDays = {};
+
 function renderDailyDetail(d){
+  LAST_DASH_DATA = d;
   var el = document.getElementById('dailyDetail');
   var days = d.daily.filter(function(x){ return x.expenseItems && x.expenseItems.length > 0; });
   if (!days.length) { el.innerHTML = '<div class="muted">本月（依目前篩選）沒有支出項目</div>'; return; }
 
+  var subOptions = (BOOT.categories||[]).map(function(c){ return c.sub; })
+    .filter(function(s, i, arr){ return arr.indexOf(s) === i; });
+  var curOptions = BOOT.currencies || [];
+
   var html = days.map(function(x){
     var rows = x.expenseItems.map(function(it){
-      return '<tr><td>'+esc(it.sub)+'</td><td>'+esc(it.currency)+'</td><td>'+Number(it.amount).toLocaleString()+'</td><td>'+esc(it.note)+'</td></tr>';
+      if (editingExpenseId !== null && String(it.id) === editingExpenseId) {
+        return '<tr>'+
+          '<td><select id="editSub_'+it.id+'">'+subOptions.map(function(s){
+            return '<option value="'+esc(s)+'"'+(s===it.sub?' selected':'')+'>'+esc(s)+'</option>';
+          }).join('')+'</select></td>'+
+          '<td><select id="editCur_'+it.id+'">'+curOptions.map(function(c){
+            return '<option value="'+esc(c)+'"'+(c===it.currency?' selected':'')+'>'+esc(c)+'</option>';
+          }).join('')+'</select></td>'+
+          '<td><input id="editAmt_'+it.id+'" type="number" step="0.01" value="'+it.amount+'" style="width:90px;max-width:100%;"></td>'+
+          '<td><input id="editNote_'+it.id+'" type="text" value="'+esc(it.note)+'" style="width:100%;"></td>'+
+          '<td style="white-space:nowrap;"><button class="btn small" onclick="saveExpenseRow(\''+it.id+'\')">儲存</button> '+
+          '<button class="btn small secondary" onclick="cancelExpenseRow()">取消</button></td>'+
+        '</tr>';
+      }
+      return '<tr><td>'+esc(it.sub)+'</td><td>'+esc(it.currency)+'</td><td>'+Number(it.amount).toLocaleString()+'</td><td>'+esc(it.note)+'</td>'+
+        '<td><button class="btn small secondary" onclick="editExpenseRow(\''+it.id+'\','+x.day+')">編輯</button></td></tr>';
     }).join('');
-    return '<details class="daily-detail">'+
+    var isOpen = openDetailDays[x.day] ? ' open' : '';
+    return '<details class="daily-detail" data-day="'+x.day+'"'+isOpen+' ontoggle="onDetailToggle(this)">'+
       '<summary>'+d.month+'-'+String(x.day).padStart(2,'0')+'　小計 NT$'+Math.round(x.expenseTotal).toLocaleString()+'（'+x.expenseItems.length+' 筆）</summary>'+
-      '<table class="detail-table"><thead><tr><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<table class="detail-table"><thead><tr><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '</details>';
   }).join('');
   el.innerHTML = html;
+}
+
+function onDetailToggle(el){
+  var day = el.dataset.day;
+  if (el.open) openDetailDays[day] = true; else delete openDetailDays[day];
+}
+
+function editExpenseRow(id, day){
+  editingExpenseId = String(id);
+  openDetailDays[day] = true;
+  renderDailyDetail(LAST_DASH_DATA);
+}
+
+function cancelExpenseRow(){
+  editingExpenseId = null;
+  renderDailyDetail(LAST_DASH_DATA);
+}
+
+function saveExpenseRow(id){
+  var sub = val('editSub_'+id);
+  var currency = val('editCur_'+id);
+  var amount = parseFloat(val('editAmt_'+id));
+  var note = val('editNote_'+id);
+  if (!sub || isNaN(amount)) { alert('請確認子項目與金額'); return; }
+  api('updateExpense','POST',null,{ id:id, subcategory:sub, currency:currency, amount:amount, note:note }).then(function(res){
+    if (!res.ok) { alert(res.error); return; }
+    editingExpenseId = null;
+    showSuccessModal('已更新支出');
+    loadDashboard();
+  });
 }
 
 function drawChart(id, type, data){
