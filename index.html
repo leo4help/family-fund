@@ -472,10 +472,12 @@
       </div>
     </div>
     <div class="card">
-      <h2>資產-依幣別 / 依銀行(當月)</h2>
+      <h2>資產-依幣別(當月)</h2>
       <table id="tblCurrency"></table>
       <div style="height:10px;"></div>
-      <table id="tblBank"></table>
+      <table>
+        <tr><td><b>合計總資產（換算 TWD）</b></td><td id="totalAssetTWD" style="text-align:right;"></td></tr>
+      </table>
     </div>
   </div>
 
@@ -893,8 +895,8 @@ function renderDashboard(d){
 
   renderBankByOwnerCharts(d);
 
-  renderTable('tblCurrency', '幣別', d.byCurrency.map(function(c){return {label:c.currency, amount:c.amount};}));
-  renderTable('tblBank', '銀行', d.byBank.filter(function(b){return b.amount>0;}).map(function(b){return {label:b.bank, amount:b.amount};}));
+  renderCurrencyTable(d.byCurrency);
+  document.getElementById('totalAssetTWD').textContent = Math.round(d.totalAsset).toLocaleString();
 }
 
 function kpi(label, value, cls){
@@ -1142,6 +1144,15 @@ function renderTable(id, labelHeader, rows){
   var el = document.getElementById(id);
   var html = '<tr><th>'+labelHeader+'</th><th>金額(TWD)</th></tr>';
   rows.forEach(function(r){ html += '<tr><td>'+r.label+'</td><td>'+Math.round(r.amount).toLocaleString()+'</td></tr>'; });
+  el.innerHTML = html;
+}
+
+function renderCurrencyTable(byCurrency){
+  var el = document.getElementById('tblCurrency');
+  var html = '<tr><th>幣別</th><th>金額（原幣）</th><th>金額(TWD)</th></tr>';
+  byCurrency.forEach(function(c){
+    html += '<tr><td>'+esc(c.currency)+'</td><td>'+Math.round(c.origAmount).toLocaleString()+'</td><td>'+Math.round(c.amount).toLocaleString()+'</td></tr>';
+  });
   el.innerHTML = html;
 }
 
