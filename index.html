@@ -889,7 +889,7 @@ function renderDashboard(d){
     labels: ownerEntries.map(function(o){return o.owner;}),
     datasets: [{
       data: ownerEntries.map(function(o){return o.amount;}),
-      backgroundColor: ownerEntries.map(function(o,i){return INCOME_PALETTE[i % INCOME_PALETTE.length];})
+      backgroundColor: ownerEntries.map(function(o,i){return colorForOwner(o.owner, i);})
     }]
   }, 'legendOwner');
 
@@ -906,6 +906,12 @@ function kpi(label, value, cls){
 // ============ 每日收支明細（堆疊長條 + 累積結餘線） ============
 var INCOME_PALETTE = ['#2e7d32','#4472C4','#00897b','#5b9bd5','#43682b','#26a69a','#7cafdd','#1b5e20','#0277bd','#66bb6a'];
 var EXPENSE_PALETTE = ['#c62828','#ed7d31','#997300','#e65100','#b71c1c','#f1975a','#8d6e63','#d84315','#ffb300','#a1662f'];
+
+// 特定擁有者固定用指定顏色，不受清單順序影響；其餘擁有者照舊用調色盤輪替
+var OWNER_COLOR_OVERRIDES = { 'YUNA': '#FF8888' };
+function colorForOwner(name, i){
+  return OWNER_COLOR_OVERRIDES[name] || INCOME_PALETTE[i % INCOME_PALETTE.length];
+}
 
 function renderDailyFlowChart(d){
   var labels = d.daily.map(function(x){ return String(x.day); });
