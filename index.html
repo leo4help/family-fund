@@ -961,6 +961,7 @@ function renderDailyDetail(d){
     var rows = x.expenseItems.map(function(it){
       if (editingExpenseId !== null && String(it.id) === editingExpenseId) {
         return '<tr>'+
+          '<td><input id="editDate_'+it.id+'" type="date" value="'+it.date+'" style="width:130px;max-width:100%;"></td>'+
           '<td><select id="editSub_'+it.id+'">'+subOptions.map(function(s){
             return '<option value="'+esc(s)+'"'+(s===it.sub?' selected':'')+'>'+esc(s)+'</option>';
           }).join('')+'</select></td>'+
@@ -973,13 +974,13 @@ function renderDailyDetail(d){
           '<button class="btn small secondary" onclick="cancelExpenseRow()">取消</button></td>'+
         '</tr>';
       }
-      return '<tr><td>'+esc(it.sub)+'</td><td>'+esc(it.currency)+'</td><td>'+Number(it.amount).toLocaleString()+'</td><td>'+esc(it.note)+'</td>'+
+      return '<tr><td>'+esc(it.date)+'</td><td>'+esc(it.sub)+'</td><td>'+esc(it.currency)+'</td><td>'+Number(it.amount).toLocaleString()+'</td><td>'+esc(it.note)+'</td>'+
         '<td><button class="btn small secondary" onclick="editExpenseRow(\''+it.id+'\','+x.day+')">編輯</button></td></tr>';
     }).join('');
     var isOpen = openDetailDays[x.day] ? ' open' : '';
     return '<details class="daily-detail" data-day="'+x.day+'"'+isOpen+' ontoggle="onDetailToggle(this)">'+
       '<summary>'+d.month+'-'+String(x.day).padStart(2,'0')+'　小計 NT$'+Math.round(x.expenseTotal).toLocaleString()+'（'+x.expenseItems.length+' 筆）</summary>'+
-      '<table class="detail-table"><thead><tr><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '<table class="detail-table"><thead><tr><th>支出日期</th><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '</details>';
   }).join('');
   el.innerHTML = html;
@@ -1002,12 +1003,13 @@ function cancelExpenseRow(){
 }
 
 function saveExpenseRow(id){
+  var date = val('editDate_'+id);
   var sub = val('editSub_'+id);
   var currency = val('editCur_'+id);
   var amount = parseFloat(val('editAmt_'+id));
   var note = val('editNote_'+id);
-  if (!sub || isNaN(amount)) { alert('請確認子項目與金額'); return; }
-  api('updateExpense','POST',null,{ id:id, subcategory:sub, currency:currency, amount:amount, note:note }).then(function(res){
+  if (!date || !sub || isNaN(amount)) { alert('請確認日期、子項目與金額'); return; }
+  api('updateExpense','POST',null,{ id:id, date:date, subcategory:sub, currency:currency, amount:amount, note:note }).then(function(res){
     if (!res.ok) { alert(res.error); return; }
     editingExpenseId = null;
     showSuccessModal('已更新支出');
