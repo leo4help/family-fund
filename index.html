@@ -743,17 +743,17 @@ function submitAssets(){
   var month = val('astMonth'), recorder = val('astRecorder');
   if (!month) { showMsg('astMsg', false, '請選年月'); return; }
   var inputs = document.querySelectorAll('#astAccountList input[data-acc]');
-  var jobs = [];
+  var items = [];
   inputs.forEach(function(inp){
-    if (inp.value !== '') {
-      jobs.push(api('addAssetSnapshot','POST',null,{month:month, accountId:inp.dataset.acc, amount:inp.value, recorder:recorder}));
-    }
+    if (inp.value !== '') items.push({ accountId: inp.dataset.acc, amount: inp.value });
   });
-  if (jobs.length === 0) { showMsg('astMsg', false, '沒有填任何金額'); return; }
-  Promise.all(jobs).then(function(results){
-    var failed = results.filter(function(r){ return !r.ok; });
-    if (failed.length) showMsg('astMsg', false, '部分失敗: ' + failed.map(function(f){return f.error;}).join(', '));
-    else { showSuccessModal('資產已儲存\n共 ' + jobs.length + ' 筆'); inputs.forEach(function(i){ i.value=''; }); }
+  if (items.length === 0) { showMsg('astMsg', false, '沒有填任何金額'); return; }
+  // 一次把所有帳戶包成一個請求送出（後端會在同一次執行內依序寫入），
+  // 不要對每個帳戶各自平行呼叫 API，否則多筆同時搶同一個空白列會互相覆蓋、遺失資料。
+  api('addAssetSnapshots','POST',null,{ month:month, recorder:recorder, items:items }).then(function(res){
+    if (!res.ok) { showMsg('astMsg', false, res.error); return; }
+    showSuccessModal('資產已儲存\n共 ' + res.data.count + ' 筆');
+    inputs.forEach(function(i){ i.value=''; });
   });
 }
 
