@@ -68,6 +68,13 @@
   table{ width:100%; border-collapse:collapse; font-size:13px; }
   th, td{ text-align:left; padding:8px 6px; border-bottom:1px solid var(--border); }
   th{ color:var(--muted); font-weight:600; }
+  .muted{ color:var(--muted); font-size:13px; }
+  .daily-detail{ border:1px solid var(--border); border-radius:8px; margin-bottom:8px; overflow:hidden; }
+  .daily-detail summary{ padding:10px 12px; cursor:pointer; font-size:14px; background:#f7f8fa; list-style:none; }
+  .daily-detail summary::-webkit-details-marker{ display:none; }
+  .daily-detail[open] summary{ border-bottom:1px solid var(--border); }
+  .daily-detail .detail-table{ margin:0; }
+  .daily-detail .detail-table th, .daily-detail .detail-table td{ padding:6px 12px; }
   .pending-item{ border:1px solid var(--border); border-radius:8px; padding:10px; margin-bottom:8px; background:#fffdf5; }
   .pending-item .meta{ font-size:12px; color:var(--muted); margin-bottom:6px; }
   .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
@@ -425,6 +432,10 @@
     <div class="card">
       <h2>每日收支明細（當月）</h2>
       <canvas id="chartTrend" height="120"></canvas>
+    </div>
+    <div class="card">
+      <h2>支出明細（依日展開）</h2>
+      <div id="dailyDetail"></div>
     </div>
     <div class="card">
       <h2>支出母項目佔比(當月)</h2>
@@ -814,6 +825,7 @@ function renderDashboard(d){
   document.getElementById('dashKpis').innerHTML = kpiHtml;
 
   renderDailyFlowChart(d);
+  renderDailyDetail(d);
 
   drawChart('chartCategory','pie', {
     labels: d.categoryBreakdown.map(function(c){return c.category;}),
@@ -873,6 +885,29 @@ function renderDailyFlowChart(d){
       scales: { x: { stacked: true }, y: { stacked: true } }
     }
   });
+}
+
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+function renderDailyDetail(d){
+  var el = document.getElementById('dailyDetail');
+  var days = d.daily.filter(function(x){ return x.expenseItems && x.expenseItems.length > 0; });
+  if (!days.length) { el.innerHTML = '<div class="muted">本月（依目前篩選）沒有支出項目</div>'; return; }
+
+  var html = days.map(function(x){
+    var rows = x.expenseItems.map(function(it){
+      return '<tr><td>'+esc(it.sub)+'</td><td>'+esc(it.currency)+'</td><td>'+Number(it.amount).toLocaleString()+'</td><td>'+esc(it.note)+'</td></tr>';
+    }).join('');
+    return '<details class="daily-detail">'+
+      '<summary>'+d.month+'-'+String(x.day).padStart(2,'0')+'　小計 NT$'+Math.round(x.expenseTotal).toLocaleString()+'（'+x.expenseItems.length+' 筆）</summary>'+
+      '<table class="detail-table"><thead><tr><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+      '</details>';
+  }).join('');
+  el.innerHTML = html;
 }
 
 function drawChart(id, type, data){
