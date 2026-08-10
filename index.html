@@ -132,8 +132,20 @@
     100%{ left:100%; }
   }
   .loading-overlay{
-    position:fixed; inset:0; z-index:150; background:transparent; cursor:wait;
+    position:fixed; inset:0; z-index:150; background:rgba(30,34,44,.35); cursor:wait;
+    display:none; align-items:center; justify-content:center;
   }
+  .loading-overlay.active{ display:flex; }
+  .loading-badge{
+    background:#fff; border-radius:10px; padding:14px 20px; display:flex; align-items:center; gap:10px;
+    box-shadow:0 4px 18px rgba(0,0,0,.25); font-size:14px; color:var(--text); font-weight:600;
+  }
+  .loading-spinner{
+    width:18px; height:18px; border-radius:50%; flex:none;
+    border:3px solid rgba(68,114,196,.25); border-top-color:var(--blue);
+    animation: loading-spin .7s linear infinite;
+  }
+  @keyframes loading-spin{ to{ transform:rotate(360deg); } }
 
   /* ===== 手機版：欄位一律改直排、縮小留白，避免橫向擠壓被裁切 ===== */
   @media (max-width: 600px){
@@ -164,7 +176,9 @@
 <body>
 
 <div id="loadingBar" class="loading-bar"></div>
-<div id="loadingOverlay" class="loading-overlay" style="display:none;"></div>
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="loading-badge"><span class="loading-spinner"></span>處理中...</div>
+</div>
 
 <div id="lockScreen" class="lock-screen">
   <div style="font-size:20px;font-weight:700;">家庭記帳系統</div>
@@ -507,7 +521,7 @@ function setLoading(on){
   }
   var active = pendingRequests > 0;
   bar.classList.toggle('active', active);
-  overlay.style.display = active ? 'block' : 'none';
+  overlay.classList.toggle('active', active);
 }
 
 function api(action, method, params, payload){
