@@ -1049,12 +1049,22 @@ function esc(s){
 var LAST_DASH_DATA = null;
 var editingExpenseId = null;
 var openDetailDays = {};
+var DETAIL_LIMIT = 3;
+var expenseDetailExpanded = false;
+
+// 收合狀態下只顯示前 N 天，底下附一個「顯示全部/收合」按鈕；兩份明細（收入/支出）共用這個 helper。
+function detailExpandButton(totalDays, expanded, toggleFnName){
+  if (totalDays <= DETAIL_LIMIT) return '';
+  var label = expanded ? '收合，只顯示前 ' + DETAIL_LIMIT + ' 天' : '顯示全部（共 ' + totalDays + ' 天）';
+  return '<button class="btn small secondary" style="margin-top:4px;" onclick="'+toggleFnName+'()">'+label+'</button>';
+}
 
 function renderDailyDetail(d){
   LAST_DASH_DATA = d;
   var el = document.getElementById('dailyDetail');
-  var days = d.daily.filter(function(x){ return x.expenseItems && x.expenseItems.length > 0; });
-  if (!days.length) { el.innerHTML = '<div class="muted">本月（依目前篩選）沒有支出項目</div>'; return; }
+  var allDays = d.daily.filter(function(x){ return x.expenseItems && x.expenseItems.length > 0; }).reverse(); // 最新日期在前
+  if (!allDays.length) { el.innerHTML = '<div class="muted">本月（依目前篩選）沒有支出項目</div>'; return; }
+  var days = expenseDetailExpanded ? allDays : allDays.slice(0, DETAIL_LIMIT);
 
   var subOptions = (BOOT.categories||[]).map(function(c){ return c.sub; })
     .filter(function(s, i, arr){ return arr.indexOf(s) === i; });
@@ -1085,8 +1095,13 @@ function renderDailyDetail(d){
       '<summary>'+d.month+'-'+String(x.day).padStart(2,'0')+'　小計 NT$'+Math.round(x.expenseTotal).toLocaleString()+'（'+x.expenseItems.length+' 筆）</summary>'+
       '<table class="detail-table"><thead><tr><th>支出日期</th><th>子項目</th><th>幣別</th><th>金額</th><th>備註</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '</details>';
-  }).join('');
+  }).join('') + detailExpandButton(allDays.length, expenseDetailExpanded, 'toggleExpenseDetailExpand');
   el.innerHTML = html;
+}
+
+function toggleExpenseDetailExpand(){
+  expenseDetailExpanded = !expenseDetailExpanded;
+  renderDailyDetail(LAST_DASH_DATA);
 }
 
 function onDetailToggle(el){
@@ -1123,12 +1138,14 @@ function saveExpenseRow(id){
 // ============ 收入明細（依日展開，跟支出明細同一套設計） ============
 var editingIncomeId = null;
 var openIncomeDetailDays = {};
+var incomeDetailExpanded = false;
 
 function renderIncomeDetail(d){
   LAST_DASH_DATA = d;
   var el = document.getElementById('incomeDetail');
-  var days = d.daily.filter(function(x){ return x.incomeItems && x.incomeItems.length > 0; });
-  if (!days.length) { el.innerHTML = '<div class="muted">本月沒有收入項目</div>'; return; }
+  var allDays = d.daily.filter(function(x){ return x.incomeItems && x.incomeItems.length > 0; }).reverse(); // 最新日期在前
+  if (!allDays.length) { el.innerHTML = '<div class="muted">本月沒有收入項目</div>'; return; }
+  var days = incomeDetailExpanded ? allDays : allDays.slice(0, DETAIL_LIMIT);
 
   var clientOptions = BOOT.clients || [];
   var curOptions = BOOT.currencies || [];
@@ -1163,8 +1180,13 @@ function renderIncomeDetail(d){
       '<summary>'+d.month+'-'+String(x.day).padStart(2,'0')+'　小計 NT$'+Math.round(x.incomeTotal).toLocaleString()+'（'+x.incomeItems.length+' 筆）</summary>'+
       '<table class="detail-table"><thead><tr><th>收入日期</th><th>客戶</th><th>幣別</th><th>金額</th><th>帳戶</th><th>備註</th><th>操作</th></tr></thead><tbody>'+rows+'</tbody></table>'+
       '</details>';
-  }).join('');
+  }).join('') + detailExpandButton(allDays.length, incomeDetailExpanded, 'toggleIncomeDetailExpand');
   el.innerHTML = html;
+}
+
+function toggleIncomeDetailExpand(){
+  incomeDetailExpanded = !incomeDetailExpanded;
+  renderIncomeDetail(LAST_DASH_DATA);
 }
 
 function onIncomeDetailToggle(el){
